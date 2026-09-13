@@ -3,6 +3,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_THEMES, FEATURED_ID } from '../lib/themes';
 import { supabaseBrowser } from '../lib/supabaseClient';
 
+// Evita que o Next tente pré-gerar esta página em tempo de build
+// (o app depende de sessão do usuário e do Supabase, então isso
+// sempre deve ser renderizado sob demanda, nunca como HTML estático).
+export const dynamic = 'force-dynamic';
+
 // Temas liberados sem assinatura (teste do produto antes de pagar)
 const FREE_THEME_IDS = [FEATURED_ID, 'estoicismo', 'motivacional'];
 
@@ -35,6 +40,7 @@ export default function Home() {
 
   // --- Sessão + assinatura + favoritos ---
   useEffect(() => {
+    if (!supabase) return; // Supabase ainda não configurado (variáveis de ambiente faltando)
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       setUser(session?.user || null);
@@ -43,7 +49,7 @@ export default function Home() {
   }, [supabase]);
 
   useEffect(() => {
-    if (!user) { setIsSubscribed(false); setFavorites(new Set()); return; }
+    if (!supabase || !user) { setIsSubscribed(false); setFavorites(new Set()); return; }
     supabase.from('subscriptions').select('status').eq('user_id', user.id).single()
       .then(({ data }) => setIsSubscribed(data?.status === 'active'));
     supabase.from('favorites').select('theme_id, phrase_idx').eq('user_id', user.id)
@@ -86,6 +92,7 @@ export default function Home() {
   }
 
   async function toggleFav() {
+    if (!supabase) { showToast('App ainda não configurado (Supabase)'); return; }
     if (!user) { window.location.href = '/login'; return; }
     const next = new Set(favorites);
     if (next.has(favKey)) {
