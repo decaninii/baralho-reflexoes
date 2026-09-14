@@ -45,6 +45,9 @@ export default function LoginPage() {
         <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 24, marginBottom: 6 }}>
           {mode === 'signup' ? 'Criar conta' : 'Entrar'}
         </h1>
+        <p style={{ fontSize: 10, color: '#D97757', marginBottom: 8 }}>
+          [debug temporário] URL definida: {String(Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL))} · começa com: {(process.env.NEXT_PUBLIC_SUPABASE_URL || 'undefined').slice(0, 20)}... · ANON_KEY definida: {String(Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY))}
+        </p>
         <p style={{ fontSize: 13, color: 'rgba(244,238,224,0.5)', marginBottom: 20 }}>
           {mode === 'signup' ? (
             <>Já tem conta? <button type="button" onClick={() => { setMode('signin'); setError(''); setMessage(''); }} style={linkBtn}>Entrar</button></>
