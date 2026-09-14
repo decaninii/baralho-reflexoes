@@ -7,6 +7,7 @@
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
+  is_admin boolean not null default false,
   created_at timestamptz default now()
 );
 
@@ -77,3 +78,9 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- ============================================================
+-- Conta de teste com acesso total (rode isso DEPOIS de criar a
+-- conta teste@teste.com pela tela de cadastro do app):
+--   update public.profiles set is_admin = true where email = 'teste@teste.com';
+-- ============================================================

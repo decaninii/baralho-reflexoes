@@ -24,7 +24,11 @@ function hexToRgb(hex) {
 export default function Home() {
   const supabase = useMemo(() => supabaseBrowser(), []);
   const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isUpgrading, setIsUpgrading] = useState(false);
+  const [paywallOpen, setPaywallOpen] = useState(false);
   const [favorites, setFavorites] = useState(new Set()); // chaves "themeId:idx"
   const [currentThemeId, setCurrentThemeId] = useState(FEATURED_ID);
   const [manualIndex, setManualIndex] = useState({});
@@ -40,8 +44,8 @@ export default function Home() {
 
   // --- Sessão + assinatura + favoritos ---
   useEffect(() => {
-    if (!supabase) return; // Supabase ainda não configurado (variáveis de ambiente faltando)
-    supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
+    if (!supabase) { setAuthChecked(true); return; } // Supabase ainda não configurado (variáveis de ambiente faltando)
+    supabase.auth.getUser().then(({ data }) => { setUser(data.user || null); setAuthChecked(true); });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       setUser(session?.user || null);
     });
@@ -49,7 +53,9 @@ export default function Home() {
   }, [supabase]);
 
   useEffect(() => {
-    if (!supabase || !user) { setIsSubscribed(false); setFavorites(new Set()); return; }
+    if (!supabase || !user) { setIsSubscribed(false); setIsAdmin(false); setFavorites(new Set()); return; }
+    supabase.from('profiles').select('is_admin').eq('id', user.id).single()
+      .then(({ data }) => setIsAdmin(!!data?.is_admin));
     supabase.from('subscriptions').select('status').eq('user_id', user.id).single()
       .then(({ data }) => setIsSubscribed(data?.status === 'active'));
     supabase.from('favorites').select('theme_id, phrase_idx').eq('user_id', user.id)
@@ -57,7 +63,7 @@ export default function Home() {
   }, [user, supabase]);
 
   function getTheme(id) { return ALL_THEMES.find(t => t.id === id); }
-  function isLocked(themeId) { return !FREE_THEME_IDS.includes(themeId) && !isSubscribed; }
+  function isLocked(themeId) { return !FREE_THEME_IDS.includes(themeId) && !isSubscribed && !isAdmin; }
   function getCurrentIndex(theme) {
     if (manualIndex[theme.id] !== undefined) return manualIndex[theme.id];
     return dayOfYear() % theme.phrases.length;
@@ -74,7 +80,7 @@ export default function Home() {
   const isFav = favorites.has(favKey);
 
   function selectTheme(id) {
-    if (isLocked(id)) { setStoryOpen(false); showToast('Esse tema é exclusivo da assinatura'); return; }
+    if (isLocked(id)) { setPaywallOpen(true); return; }
     setCurrentThemeId(id);
     setShowMedium(false);
     setSidebarOpen(false);
@@ -94,6 +100,7 @@ export default function Home() {
   async function toggleFav() {
     if (!supabase) { showToast('App ainda não configurado (Supabase)'); return; }
     if (!user) { window.location.href = '/login'; return; }
+    showToast('salvando...');
     const next = new Set(favorites);
     if (next.has(favKey)) {
       next.delete(favKey);
@@ -196,22 +203,36 @@ export default function Home() {
 
   async function handleUpgrade() {
     if (!user) { window.location.href = '/login'; return; }
-    const res = await fetch('/api/create-subscription', { method: 'POST' });
-    const data = await res.json();
-    if (data.checkoutUrl) window.location.href = data.checkoutUrl;
-    else showToast('Não foi possível iniciar a assinatura');
+    setIsUpgrading(true);
+    try {
+      const res = await fetch('/api/create-subscription', { method: 'POST' });
+      const data = await res.json();
+      if (data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
+      showToast('Não foi possível iniciar a assinatura');
+    } catch {
+      showToast('Erro de conexão. Tente de novo.');
+    } finally {
+      setIsUpgrading(false);
+    }
   }
 
   return (
     <div id="app" style={{ '--theme-color': displayColor }}>
       <div className="topbar">
-        {user ? (
+        {!authChecked ? (
+          <span style={{ opacity: 0.5 }}>carregando…</span>
+        ) : user ? (
           <>
-            {!isSubscribed && <button onClick={handleUpgrade}>Assinar</button>}
+            {isAdmin && <span style={{ color: '#8FA07E' }}>★ admin</span>}
+            {!isAdmin && !isSubscribed && (
+              <button onClick={handleUpgrade} disabled={isUpgrading} style={{ opacity: isUpgrading ? 0.6 : 1 }}>
+                {isUpgrading ? 'abrindo...' : 'Assinar'}
+              </button>
+            )}
             <span style={{ opacity: 0.5 }}>{user.email}</span>
           </>
         ) : (
-          <a href="/login">Entrar</a>
+          <a href="/login">Entrar / Criar conta</a>
         )}
       </div>
 
@@ -317,6 +338,28 @@ export default function Home() {
             <div style={{ marginTop: 16 }}>
               <button className="listenbtn" onClick={downloadStory}>⬇ Compartilhar / baixar</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {paywallOpen && (
+        <div className="overlay show">
+          <div className="sheet" style={{ maxWidth: 380, textAlign: 'center' }}>
+            <button className="sheet-close" onClick={() => setPaywallOpen(false)}>✕</button>
+            <h2>Tema exclusivo da assinatura</h2>
+            <p style={{ marginTop: 12 }}>
+              Esse tema faz parte do conteúdo completo do Baralho de Reflexões.
+              {FREE_THEME_IDS.length > 1 ? ' Você já pode experimentar de graça os temas em destaque no menu.' : ''}
+            </p>
+            {!authChecked ? (
+              <p style={{ marginTop: 16 }}>carregando…</p>
+            ) : !user ? (
+              <a className="listenbtn" href="/login" style={{ display: 'inline-block' }}>Entrar ou criar conta</a>
+            ) : (
+              <button className="listenbtn" onClick={handleUpgrade} disabled={isUpgrading}>
+                {isUpgrading ? 'Abrindo checkout...' : 'Assinar agora'}
+              </button>
+            )}
           </div>
         </div>
       )}
