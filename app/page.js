@@ -300,8 +300,14 @@ export default function Home() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
+      const raw = await res.text();
+      let data;
+      try { data = JSON.parse(raw); } catch { data = null; }
+      if (data?.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
+      if (!data) {
+        showToast(`Erro ${res.status}: ${raw.slice(0, 140)}`);
+        return;
+      }
       const debugParts = [data.debug_message, data.debug_auth_error].filter(Boolean).join(' · ');
       showToast(debugParts || data.error || 'Não foi possível iniciar a assinatura');
     } catch {
