@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { MercadoPagoConfig, PreApproval } from 'mercadopago';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 
-const SUBSCRIPTION_PRICE = 0.01;
+const SUBSCRIPTION_PRICE = 0.50;
 
 export async function POST(request) {
   try {
