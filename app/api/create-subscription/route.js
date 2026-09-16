@@ -31,7 +31,7 @@ export async function POST() {
   try {
     const result = await preapproval.create({
       body: {
-        reason: 'Assinatura Baralho de Reflexões',
+        reason: 'Assinatura Minuto de Reflexão',
         external_reference: user.id, // usamos isso no webhook pra saber de quem é
         payer_email: user.email,
         back_url: `${process.env.NEXT_PUBLIC_SITE_URL}/`,

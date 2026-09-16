@@ -1,7 +1,7 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'Baralho de Reflexões',
+  title: 'Minuto de Reflexão',
   description: 'Reflexões diárias por temas, com áudio e aprofundamento.',
   manifest: '/manifest.json',
 };

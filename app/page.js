@@ -39,8 +39,31 @@ export default function Home() {
   const [storyOpen, setStoryOpen] = useState(false);
   const [storyImg, setStoryImg] = useState('');
   const [toastMsg, setToastMsg] = useState('');
+  const [voices, setVoices] = useState([]);
+  const [voiceURI, setVoiceURI] = useState('');
+  const [playingSegment, setPlayingSegment] = useState(null); // índice do trecho tocando, ou null
   const canvasRef = useRef(null);
   const speakingRef = useRef(false);
+
+  // --- Vozes disponíveis para leitura (carrega e lembra a escolhida) ---
+  useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+    function loadVoices() {
+      const all = speechSynthesis.getVoices();
+      const pt = all.filter(v => v.lang?.toLowerCase().startsWith('pt'));
+      const list = pt.length ? pt : all;
+      setVoices(list);
+      const saved = localStorage.getItem('vozEscolhida');
+      if (saved && list.some(v => v.voiceURI === saved)) setVoiceURI(saved);
+      else if (list[0]) setVoiceURI(list[0].voiceURI);
+    }
+    loadVoices();
+    speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
+  function chooseVoice(uri) {
+    setVoiceURI(uri);
+    localStorage.setItem('vozEscolhida', uri);
+  }
 
   // --- Sessão + assinatura + favoritos ---
   useEffect(() => {
@@ -54,8 +77,13 @@ export default function Home() {
 
   useEffect(() => {
     if (!supabase || !user) { setIsSubscribed(false); setIsAdmin(false); setFavorites(new Set()); return; }
-    supabase.from('profiles').select('is_admin').eq('id', user.id).single()
-      .then(({ data }) => setIsAdmin(!!data?.is_admin));
+    supabase.from('profiles').select('is_admin, preferred_theme_id').eq('id', user.id).single()
+      .then(({ data }) => {
+        setIsAdmin(!!data?.is_admin);
+        if (data?.preferred_theme_id && ALL_THEMES.some(t => t.id === data.preferred_theme_id)) {
+          setCurrentThemeId(cur => cur === FEATURED_ID ? data.preferred_theme_id : cur);
+        }
+      });
     supabase.from('subscriptions').select('status').eq('user_id', user.id).single()
       .then(({ data }) => setIsSubscribed(data?.status === 'active'));
     supabase.from('favorites').select('theme_id, phrase_idx').eq('user_id', user.id)
@@ -122,12 +150,34 @@ export default function Home() {
     setTimeout(() => setToastMsg(''), 1800);
   }
 
-  function speak(text) {
+  function speak(text, onEnd) {
     if (!('speechSynthesis' in window)) { showToast('Áudio não suportado neste navegador'); return; }
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'pt-BR'; u.rate = 0.98;
+    const v = voices.find(v => v.voiceURI === voiceURI);
+    if (v) u.voice = v;
+    if (onEnd) u.onend = onEnd;
     speechSynthesis.speak(u);
+  }
+  // Os mesmos trechos que aparecem escritos no aprofundamento — nessa
+  // ordem exata — para que o que é falado seja idêntico ao que é lido.
+  function getSegments(p) {
+    return [p.medium, ...p.long, p.question];
+  }
+  function playSegment(i) {
+    const segments = getSegments(phrase);
+    if (i < 0 || i >= segments.length) { setPlayingSegment(null); return; }
+    setPlayingSegment(i);
+    speak(segments[i], () => {
+      // ao terminar um trecho, segue automaticamente pro próximo
+      setPlayingSegment(cur => (cur === i ? null : cur));
+      playSegment(i + 1);
+    });
+  }
+  function stopPlayback() {
+    speechSynthesis.cancel();
+    setPlayingSegment(null);
   }
 
   function drawStory() {
@@ -166,7 +216,7 @@ export default function Home() {
 
     ctx.font = 'italic 34px Georgia, serif';
     ctx.fillStyle = 'rgba(244,238,224,0.75)';
-    ctx.fillText('Baralho de Reflexões', W / 2, H * 0.92);
+    ctx.fillText('Minuto de Reflexão', W / 2, H * 0.92);
 
     setStoryImg(canvas.toDataURL('image/png'));
   }
@@ -201,6 +251,12 @@ export default function Home() {
     }, 'image/png');
   }
 
+  async function handleLogout() {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  }
+
   async function handleUpgrade() {
     if (!user) { window.location.href = '/login'; return; }
     setIsUpgrading(true);
@@ -230,6 +286,7 @@ export default function Home() {
               </button>
             )}
             <span style={{ opacity: 0.5 }}>{user.email}</span>
+            <button onClick={handleLogout}>Sair</button>
           </>
         ) : (
           <a href="/login">Entrar / Criar conta</a>
@@ -238,7 +295,7 @@ export default function Home() {
 
       <div id="sidebar" className={sidebarOpen ? 'open' : ''}>
         <div className="sidebar-head">
-          <div className="brandmark">Baralho de Reflexões</div>
+          <div className="brandmark">Minuto de Reflexão</div>
           <button id="sidebarClose" onClick={() => setSidebarOpen(false)}>✕</button>
         </div>
         <div id="themeList">
@@ -259,9 +316,13 @@ export default function Home() {
       {sidebarOpen && <div id="sidebarBackdrop" className="show" onClick={() => setSidebarOpen(false)} />}
 
       <div id="stage">
+        <div className="meshBg" />
+        <div className="grain" />
         <div className="blob blob1" />
         <div className="blob blob2" />
         <div className="blob blob3" />
+        <div className="blob blob4" />
+        <div className="blob blob5" />
         <button id="menuToggle" onClick={() => setSidebarOpen(true)}>☰</button>
         <div id="stageLabel">
           <b>{theme.featured ? '★ ' + theme.name : theme.name}</b> ·{' '}
@@ -277,6 +338,9 @@ export default function Home() {
         <div className="phraseCard">
           <div id="shortText" onClick={() => setShowMedium(s => !s)}>{phrase.short}</div>
           <div id="mediumText" className={showMedium ? 'show' : ''}>{phrase.medium}</div>
+          <div className={`continueHint ${showMedium ? 'expanded' : ''}`} onClick={() => setShowMedium(s => !s)}>
+            {showMedium ? 'ver menos' : 'continue lendo'} <span className="chev">⌄</span>
+          </div>
         </div>
 
         <div className="stageActions">
@@ -289,22 +353,50 @@ export default function Home() {
         </div>
       </div>
 
-      {deepOpen && (
+      {deepOpen && (() => {
+        const segments = getSegments(phrase);
+        return (
         <div className="overlay show">
           <div className="sheet">
-            <button className="sheet-close" onClick={() => setDeepOpen(false)}>✕</button>
+            <button className="sheet-close" onClick={() => { setDeepOpen(false); stopPlayback(); }}>✕</button>
             <h2>{phrase.short}</h2>
             <div className="source">
               {phrase.author ? `${phrase.author}${phrase.context ? ' · ' + phrase.context : ''}` : 'Reflexão do dia'}
             </div>
-            {phrase.long.map((p, i) => <p key={i}>{p}</p>)}
-            <div className="questionBox">{phrase.question}</div>
-            <button className="listenbtn" onClick={() => speak(phrase.medium + ' ' + phrase.long.join(' ') + ' ' + phrase.question)}>
-              🔊 ouvir reflexão
-            </button>
+
+            {/* Cada bloco é clicável e toca só aquele trecho — o texto falado
+                é sempre exatamente igual ao texto escrito aqui. */}
+            <p className={`segment ${playingSegment === 0 ? 'playing' : ''}`} onClick={() => playSegment(0)}>{phrase.medium}</p>
+            {phrase.long.map((p, i) => (
+              <p key={i} className={`segment ${playingSegment === i + 1 ? 'playing' : ''}`} onClick={() => playSegment(i + 1)}>{p}</p>
+            ))}
+            <div className={`questionBox segment ${playingSegment === segments.length - 1 ? 'playing' : ''}`} onClick={() => playSegment(segments.length - 1)}>
+              {phrase.question}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 18 }}>
+              <button className={`listenbtn ${playingSegment !== null ? 'playing' : ''}`} onClick={() => playingSegment !== null ? stopPlayback() : playSegment(0)}>
+                {playingSegment !== null ? '⏸ pausar' : '🔊 ouvir reflexão'}
+              </button>
+              {playingSegment !== null && (
+                <>
+                  <button className="listenbtn" onClick={() => playSegment(playingSegment - 1)} disabled={playingSegment === 0}>⏮ voltar trecho</button>
+                  <button className="listenbtn" onClick={() => playSegment(playingSegment + 1)} disabled={playingSegment === segments.length - 1}>⏭ próximo trecho</button>
+                </>
+              )}
+              {voices.length > 0 && (
+                <select value={voiceURI} onChange={(e) => chooseVoice(e.target.value)} className="voiceSelect">
+                  {voices.map(v => <option key={v.voiceURI} value={v.voiceURI}>{v.name}</option>)}
+                </select>
+              )}
+            </div>
+            <p style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 8 }}>
+              Dica: toque em qualquer parágrafo para ouvir a partir dali.
+            </p>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {favOpen && (
         <div className="overlay show">
@@ -348,7 +440,7 @@ export default function Home() {
             <button className="sheet-close" onClick={() => setPaywallOpen(false)}>✕</button>
             <h2>Tema exclusivo da assinatura</h2>
             <p style={{ marginTop: 12 }}>
-              Esse tema faz parte do conteúdo completo do Baralho de Reflexões.
+              Esse tema faz parte do conteúdo completo do Minuto de Reflexão.
               {FREE_THEME_IDS.length > 1 ? ' Você já pode experimentar de graça os temas em destaque no menu.' : ''}
             </p>
             {!authChecked ? (

@@ -1,4 +1,4 @@
-# Baralho de Reflexões — passo a passo para colocar no ar hoje
+# Minuto de Reflexão — passo a passo para colocar no ar hoje
 
 Este projeto já vem com: as 150 frases (15 temas), login por link mágico,
 favoritos e assinatura ligados ao Supabase, paywall (3 temas grátis, resto

@@ -1,11 +1,15 @@
 'use client';
 import { useState } from 'react';
 import { supabaseBrowser } from '../../lib/supabaseClient';
+import { THEMES } from '../../lib/themes';
 
 export default function LoginPage() {
   const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [preferredThemeId, setPreferredThemeId] = useState(THEMES[0].id);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -17,11 +21,14 @@ export default function LoginPage() {
     if (!supabase) { setError('App ainda não configurado (variáveis do Supabase ausentes).'); setLoading(false); return; }
 
     if (mode === 'signup') {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email, password,
+        options: { data: { full_name: fullName, birth_date: birthDate, preferred_theme_id: preferredThemeId } },
+      });
       setLoading(false);
       if (error) { setError(error.message); return; }
       if (data.session) {
-        window.location.href = '/'; // confirmação de e-mail desligada: já entra direto
+        window.location.href = '/';
       } else {
         setMessage('Conta criada! Verifique seu e-mail para confirmar antes de entrar.');
       }
@@ -38,16 +45,13 @@ export default function LoginPage() {
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: '#100E0C', color: '#F4EEE0', fontFamily: 'sans-serif', padding: 24,
     }}>
-      <div style={{ maxWidth: 360, width: '100%', textAlign: 'center' }}>
+      <div style={{ maxWidth: 380, width: '100%', textAlign: 'center' }}>
         <div style={{ fontSize: 12, letterSpacing: '0.16em', color: '#C79A4B', textTransform: 'uppercase', marginBottom: 10 }}>
-          Baralho de Reflexões
+          Minuto de Reflexão
         </div>
         <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 24, marginBottom: 6 }}>
           {mode === 'signup' ? 'Criar conta' : 'Entrar'}
         </h1>
-        <p style={{ fontSize: 10, color: '#D97757', marginBottom: 8 }}>
-          [debug temporário] URL definida: {String(Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL))} · começa com: {(process.env.NEXT_PUBLIC_SUPABASE_URL || 'undefined').slice(0, 20)}... · ANON_KEY definida: {String(Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY))}
-        </p>
         <p style={{ fontSize: 13, color: 'rgba(244,238,224,0.5)', marginBottom: 20 }}>
           {mode === 'signup' ? (
             <>Já tem conta? <button type="button" onClick={() => { setMode('signin'); setError(''); setMessage(''); }} style={linkBtn}>Entrar</button></>
@@ -57,20 +61,26 @@ export default function LoginPage() {
         </p>
 
         <form onSubmit={handleSubmit}>
-          <input
-            type="email" required placeholder="seu@email.com" value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={inputStyle}
-          />
-          <input
-            type="password" required minLength={6} placeholder="senha (mín. 6 caracteres)" value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={inputStyle}
-          />
+          <input type="email" required placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
+          <input type="password" required minLength={6} placeholder="senha (mín. 6 caracteres)" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
+
+          {mode === 'signup' && (
+            <>
+              <input type="text" required placeholder="seu nome" value={fullName} onChange={(e) => setFullName(e.target.value)} style={inputStyle} />
+              <label style={labelStyle}>Data de nascimento</label>
+              <input type="date" required value={birthDate} onChange={(e) => setBirthDate(e.target.value)} style={inputStyle} />
+              <label style={labelStyle}>Tema que mais te interessa hoje</label>
+              <select value={preferredThemeId} onChange={(e) => setPreferredThemeId(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+                {THEMES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </>
+          )}
+
           <button type="submit" disabled={loading} style={{
             width: '100%', padding: '12px 14px', borderRadius: 22, border: 'none',
             background: loading ? '#8A6A26' : '#C79A4B', color: '#241D10', fontWeight: 600, fontSize: 14,
             cursor: loading ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            marginTop: 4,
           }}>
             {loading && <span style={spinnerStyle} />}
             {loading ? 'Só um instante...' : (mode === 'signup' ? 'Criar conta' : 'Entrar')}
@@ -85,6 +95,7 @@ export default function LoginPage() {
 }
 
 const linkBtn = { background: 'none', border: 'none', color: '#C79A4B', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, padding: 0 };
+const labelStyle = { display: 'block', textAlign: 'left', fontSize: 12, color: 'rgba(244,238,224,0.5)', marginBottom: 6 };
 const inputStyle = {
   width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid rgba(244,238,224,0.2)',
   background: 'rgba(244,238,224,0.06)', color: '#F4EEE0', fontSize: 15, marginBottom: 12,

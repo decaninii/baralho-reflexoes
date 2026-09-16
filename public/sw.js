@@ -1,5 +1,5 @@
 self.addEventListener('push', (event) => {
-  const data = event.data ? event.data.json() : { title: 'Baralho de Reflexões', body: 'Sua reflexão de hoje chegou.' };
+  const data = event.data ? event.data.json() : { title: 'Minuto de Reflexão', body: 'Sua reflexão de hoje chegou.' };
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,

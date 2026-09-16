@@ -1,12 +1,23 @@
 -- ============================================================
--- Baralho de Reflexões — schema inicial do Supabase
+-- Minuto de Reflexão — schema inicial do Supabase
 -- Rode isso no SQL Editor do painel do Supabase (uma vez só).
+-- ============================================================
+
+-- ============================================================
+-- Migração (rode isso se as tabelas já existiam antes destes campos):
+--   alter table public.profiles add column if not exists full_name text;
+--   alter table public.profiles add column if not exists birth_date date;
+--   alter table public.profiles add column if not exists preferred_theme_id text;
+--   alter table public.profiles add column if not exists is_admin boolean not null default false;
 -- ============================================================
 
 -- Perfil básico (1 linha por usuário autenticado)
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
+  full_name text,
+  birth_date date,
+  preferred_theme_id text,
   is_admin boolean not null default false,
   created_at timestamptz default now()
 );
@@ -68,7 +79,14 @@ create policy "push_subscriptions: CRUD do próprio usuário" on public.push_sub
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (id, email) values (new.id, new.email);
+  insert into public.profiles (id, email, full_name, birth_date, preferred_theme_id)
+  values (
+    new.id,
+    new.email,
+    new.raw_user_meta_data ->> 'full_name',
+    nullif(new.raw_user_meta_data ->> 'birth_date', '')::date,
+    new.raw_user_meta_data ->> 'preferred_theme_id'
+  );
   insert into public.subscriptions (user_id, status) values (new.id, 'inactive');
   return new;
 end;
