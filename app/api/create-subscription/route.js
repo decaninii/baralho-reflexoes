@@ -25,6 +25,10 @@ export async function POST() {
     return NextResponse.json({ error: 'not_authenticated' }, { status: 401 });
   }
 
+  if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
+    return NextResponse.json({ error: 'Faltando MERCADOPAGO_ACCESS_TOKEN nas variáveis de ambiente.' }, { status: 500 });
+  }
+
   const client = new MercadoPagoConfig({ accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN });
   const preapproval = new PreApproval(client);
 
@@ -47,7 +51,15 @@ export async function POST() {
 
     return NextResponse.json({ checkoutUrl: result.init_point });
   } catch (err) {
-    console.error('Erro ao criar assinatura MP:', err);
-    return NextResponse.json({ error: 'mp_error' }, { status: 500 });
+    // DEBUG TEMPORÁRIO: expõe o erro real do Mercado Pago na resposta,
+    // pra gente ver na aba Network sem precisar abrir o log do Vercel.
+    // Remover isso depois de identificar a causa.
+    console.error('Erro ao criar assinatura MP:', JSON.stringify(err, null, 2));
+    return NextResponse.json({
+      error: 'mp_error',
+      debug_message: err?.message || null,
+      debug_cause: err?.cause || null,
+      debug_status: err?.status || err?.statusCode || null,
+    }, { status: 500 });
   }
 }

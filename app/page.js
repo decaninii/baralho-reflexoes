@@ -41,7 +41,7 @@ export default function Home() {
   const [toastMsg, setToastMsg] = useState('');
   const [voices, setVoices] = useState([]);
   const [voiceURI, setVoiceURI] = useState('');
-  const [playingSegment, setPlayingSegment] = useState(null); // índice do trecho tocando, ou null
+  const [currentWordIndex, setCurrentWordIndex] = useState(null); // palavra tocando agora, ou null
   const canvasRef = useRef(null);
   const speakingRef = useRef(false);
 
@@ -77,11 +77,13 @@ export default function Home() {
 
   useEffect(() => {
     if (!supabase || !user) { setIsSubscribed(false); setIsAdmin(false); setFavorites(new Set()); return; }
-    supabase.from('profiles').select('is_admin, preferred_theme_id').eq('id', user.id).single()
+    supabase.from('profiles').select('is_admin, preferred_theme_ids').eq('id', user.id).single()
       .then(({ data }) => {
         setIsAdmin(!!data?.is_admin);
-        if (data?.preferred_theme_id && ALL_THEMES.some(t => t.id === data.preferred_theme_id)) {
-          setCurrentThemeId(cur => cur === FEATURED_ID ? data.preferred_theme_id : cur);
+        const prefs = (data?.preferred_theme_ids || []).filter(id => ALL_THEMES.some(t => t.id === id));
+        if (prefs.length) {
+          const pick = prefs[Math.floor(Math.random() * prefs.length)];
+          setCurrentThemeId(cur => cur === FEATURED_ID ? pick : cur);
         }
       });
     supabase.from('subscriptions').select('status').eq('user_id', user.id).single()
@@ -147,7 +149,8 @@ export default function Home() {
 
   function showToast(msg) {
     setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 1800);
+    const duration = Math.min(7000, Math.max(1800, msg.length * 60));
+    setTimeout(() => setToastMsg(''), duration);
   }
 
   function speak(text, onEnd) {
@@ -165,19 +168,40 @@ export default function Home() {
   function getSegments(p) {
     return [p.medium, ...p.long, p.question];
   }
-  function playSegment(i) {
-    const segments = getSegments(phrase);
-    if (i < 0 || i >= segments.length) { setPlayingSegment(null); return; }
-    setPlayingSegment(i);
-    speak(segments[i], () => {
-      // ao terminar um trecho, segue automaticamente pro próximo
-      setPlayingSegment(cur => (cur === i ? null : cur));
-      playSegment(i + 1);
+  // Quebra tudo em palavras, guardando a qual segmento (parágrafo) cada
+  // uma pertence e sua posição inicial — isso permite tocar a partir de
+  // qualquer palavra específica, não só do início do parágrafo inteiro.
+  function getWordsMeta(p) {
+    let offset = 0;
+    return getSegments(p).map(text => {
+      const words = text.split(/\s+/).filter(Boolean);
+      const start = offset;
+      offset += words.length;
+      return { words, start };
     });
+  }
+  function playFromWord(idx) {
+    const allWords = getWordsMeta(phrase).flatMap(seg => seg.words);
+    if (idx < 0 || idx >= allWords.length) { stopPlayback(); return; }
+    setCurrentWordIndex(idx);
+    const textFrom = allWords.slice(idx).join(' ');
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(textFrom);
+    u.lang = 'pt-BR'; u.rate = 0.98;
+    const v = voices.find(v => v.voiceURI === voiceURI);
+    if (v) u.voice = v;
+    u.onboundary = (e) => {
+      if (e.name && e.name !== 'word') return;
+      const consumed = textFrom.slice(0, e.charIndex).trim();
+      const consumedWords = consumed ? consumed.split(/\s+/).length : 0;
+      setCurrentWordIndex(idx + consumedWords);
+    };
+    u.onend = () => setCurrentWordIndex(null);
+    speechSynthesis.speak(u);
   }
   function stopPlayback() {
     speechSynthesis.cancel();
-    setPlayingSegment(null);
+    setCurrentWordIndex(null);
   }
 
   function drawStory() {
@@ -264,7 +288,7 @@ export default function Home() {
       const res = await fetch('/api/create-subscription', { method: 'POST' });
       const data = await res.json();
       if (data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
-      showToast('Não foi possível iniciar a assinatura');
+      showToast(data.debug_message || data.error || 'Não foi possível iniciar a assinatura');
     } catch {
       showToast('Erro de conexão. Tente de novo.');
     } finally {
@@ -316,6 +340,8 @@ export default function Home() {
       {sidebarOpen && <div id="sidebarBackdrop" className="show" onClick={() => setSidebarOpen(false)} />}
 
       <div id="stage">
+        <div className="colorWash" />
+        <div className="marble" />
         <div className="meshBg" />
         <div className="grain" />
         <div className="blob blob1" />
@@ -354,7 +380,23 @@ export default function Home() {
       </div>
 
       {deepOpen && (() => {
-        const segments = getSegments(phrase);
+        const segMeta = getWordsMeta(phrase);
+        const totalWords = segMeta.reduce((n, s) => n + s.words.length, 0);
+        function renderSegment(segIndex) {
+          const { words, start } = segMeta[segIndex];
+          return words.map((w, wi) => {
+            const gIdx = start + wi;
+            return (
+              <span
+                key={wi}
+                className={`word ${gIdx === currentWordIndex ? 'wordActive' : ''}`}
+                onClick={() => playFromWord(gIdx)}
+              >
+                {w}{' '}
+              </span>
+            );
+          });
+        }
         return (
         <div className="overlay show">
           <div className="sheet">
@@ -364,24 +406,20 @@ export default function Home() {
               {phrase.author ? `${phrase.author}${phrase.context ? ' · ' + phrase.context : ''}` : 'Reflexão do dia'}
             </div>
 
-            {/* Cada bloco é clicável e toca só aquele trecho — o texto falado
+            {/* Cada palavra é clicável e toca a partir dali — o texto falado
                 é sempre exatamente igual ao texto escrito aqui. */}
-            <p className={`segment ${playingSegment === 0 ? 'playing' : ''}`} onClick={() => playSegment(0)}>{phrase.medium}</p>
-            {phrase.long.map((p, i) => (
-              <p key={i} className={`segment ${playingSegment === i + 1 ? 'playing' : ''}`} onClick={() => playSegment(i + 1)}>{p}</p>
-            ))}
-            <div className={`questionBox segment ${playingSegment === segments.length - 1 ? 'playing' : ''}`} onClick={() => playSegment(segments.length - 1)}>
-              {phrase.question}
-            </div>
+            <p>{renderSegment(0)}</p>
+            {phrase.long.map((p, i) => <p key={i}>{renderSegment(i + 1)}</p>)}
+            <div className="questionBox">{renderSegment(segMeta.length - 1)}</div>
 
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 18 }}>
-              <button className={`listenbtn ${playingSegment !== null ? 'playing' : ''}`} onClick={() => playingSegment !== null ? stopPlayback() : playSegment(0)}>
-                {playingSegment !== null ? '⏸ pausar' : '🔊 ouvir reflexão'}
+              <button className={`listenbtn ${currentWordIndex !== null ? 'playing' : ''}`} onClick={() => currentWordIndex !== null ? stopPlayback() : playFromWord(0)}>
+                {currentWordIndex !== null ? '⏸ pausar' : '🔊 ouvir reflexão'}
               </button>
-              {playingSegment !== null && (
+              {currentWordIndex !== null && (
                 <>
-                  <button className="listenbtn" onClick={() => playSegment(playingSegment - 1)} disabled={playingSegment === 0}>⏮ voltar trecho</button>
-                  <button className="listenbtn" onClick={() => playSegment(playingSegment + 1)} disabled={playingSegment === segments.length - 1}>⏭ próximo trecho</button>
+                  <button className="listenbtn" onClick={() => playFromWord(Math.max(0, currentWordIndex - 6))}>⏮ voltar</button>
+                  <button className="listenbtn" onClick={() => playFromWord(Math.min(totalWords - 1, currentWordIndex + 6))}>⏭ avançar</button>
                 </>
               )}
               {voices.length > 0 && (
@@ -391,7 +429,7 @@ export default function Home() {
               )}
             </div>
             <p style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 8 }}>
-              Dica: toque em qualquer parágrafo para ouvir a partir dali.
+              Dica: toque em qualquer palavra do texto para ouvir a partir dali.
             </p>
           </div>
         </div>

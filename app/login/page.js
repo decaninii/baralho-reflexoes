@@ -9,7 +9,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [birthDate, setBirthDate] = useState('');
-  const [preferredThemeId, setPreferredThemeId] = useState(THEMES[0].id);
+  const [preferredThemeIds, setPreferredThemeIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -21,9 +21,12 @@ export default function LoginPage() {
     if (!supabase) { setError('App ainda não configurado (variáveis do Supabase ausentes).'); setLoading(false); return; }
 
     if (mode === 'signup') {
+      if (preferredThemeIds.length === 0) {
+        setError('Escolha pelo menos um tema.'); setLoading(false); return;
+      }
       const { data, error } = await supabase.auth.signUp({
         email, password,
-        options: { data: { full_name: fullName, birth_date: birthDate, preferred_theme_id: preferredThemeId } },
+        options: { data: { full_name: fullName, birth_date: birthDate, preferred_theme_ids: preferredThemeIds } },
       });
       setLoading(false);
       if (error) { setError(error.message); return; }
@@ -69,10 +72,22 @@ export default function LoginPage() {
               <input type="text" required placeholder="seu nome" value={fullName} onChange={(e) => setFullName(e.target.value)} style={inputStyle} />
               <label style={labelStyle}>Data de nascimento</label>
               <input type="date" required value={birthDate} onChange={(e) => setBirthDate(e.target.value)} style={inputStyle} />
-              <label style={labelStyle}>Tema que mais te interessa hoje</label>
-              <select value={preferredThemeId} onChange={(e) => setPreferredThemeId(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-                {THEMES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
+              <label style={labelStyle}>Temas que mais te interessam (escolha um ou mais)</label>
+              <div style={checkGrid}>
+                {THEMES.map(t => (
+                  <label key={t.id} style={checkItem(preferredThemeIds.includes(t.id))}>
+                    <input
+                      type="checkbox"
+                      checked={preferredThemeIds.includes(t.id)}
+                      onChange={() => setPreferredThemeIds(prev =>
+                        prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id]
+                      )}
+                      style={{ marginRight: 8 }}
+                    />
+                    {t.name}
+                  </label>
+                ))}
+              </div>
             </>
           )}
 
@@ -104,3 +119,14 @@ const spinnerStyle = {
   width: 14, height: 14, border: '2px solid rgba(36,29,16,0.4)', borderTopColor: '#241D10',
   borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block',
 };
+const checkGrid = {
+  display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14, textAlign: 'left',
+};
+function checkItem(active) {
+  return {
+    display: 'flex', alignItems: 'center', fontSize: 13, padding: '9px 10px', borderRadius: 8,
+    border: `1px solid ${active ? '#C79A4B' : 'rgba(244,238,224,0.15)'}`,
+    background: active ? 'rgba(199,154,75,0.12)' : 'rgba(244,238,224,0.04)',
+    color: '#F4EEE0', cursor: 'pointer',
+  };
+}

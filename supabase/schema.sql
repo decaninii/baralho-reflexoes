@@ -7,7 +7,8 @@
 -- Migração (rode isso se as tabelas já existiam antes destes campos):
 --   alter table public.profiles add column if not exists full_name text;
 --   alter table public.profiles add column if not exists birth_date date;
---   alter table public.profiles add column if not exists preferred_theme_id text;
+--   alter table public.profiles drop column if exists preferred_theme_id;
+--   alter table public.profiles add column if not exists preferred_theme_ids text[] default '{}';
 --   alter table public.profiles add column if not exists is_admin boolean not null default false;
 -- ============================================================
 
@@ -17,7 +18,7 @@ create table if not exists public.profiles (
   email text,
   full_name text,
   birth_date date,
-  preferred_theme_id text,
+  preferred_theme_ids text[] default '{}',
   is_admin boolean not null default false,
   created_at timestamptz default now()
 );
@@ -79,13 +80,16 @@ create policy "push_subscriptions: CRUD do próprio usuário" on public.push_sub
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (id, email, full_name, birth_date, preferred_theme_id)
+  insert into public.profiles (id, email, full_name, birth_date, preferred_theme_ids)
   values (
     new.id,
     new.email,
     new.raw_user_meta_data ->> 'full_name',
     nullif(new.raw_user_meta_data ->> 'birth_date', '')::date,
-    new.raw_user_meta_data ->> 'preferred_theme_id'
+    coalesce(
+      (select array_agg(value) from jsonb_array_elements_text(new.raw_user_meta_data -> 'preferred_theme_ids') as value),
+      '{}'
+    )
   );
   insert into public.subscriptions (user_id, status) values (new.id, 'inactive');
   return new;
