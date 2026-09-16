@@ -77,9 +77,17 @@ export default function Home() {
 
   useEffect(() => {
     if (!supabase || !user) { setIsSubscribed(false); setIsAdmin(false); setFavorites(new Set()); return; }
-    supabase.from('profiles').select('is_admin, preferred_theme_ids').eq('id', user.id).single()
-      .then(({ data }) => {
+    // Consultas separadas de propósito: se uma coluna ainda não existir
+    // na sua tabela (ex: preferred_theme_ids antes da migração), ela não
+    // deve derrubar a outra consulta (ex: is_admin).
+    supabase.from('profiles').select('is_admin').eq('id', user.id).single()
+      .then(({ data, error }) => {
+        if (error) console.error('Erro ao buscar is_admin:', error.message);
         setIsAdmin(!!data?.is_admin);
+      });
+    supabase.from('profiles').select('preferred_theme_ids').eq('id', user.id).single()
+      .then(({ data, error }) => {
+        if (error) { console.error('Erro ao buscar preferred_theme_ids:', error.message); return; }
         const prefs = (data?.preferred_theme_ids || []).filter(id => ALL_THEMES.some(t => t.id === id));
         if (prefs.length) {
           const pick = prefs[Math.floor(Math.random() * prefs.length)];

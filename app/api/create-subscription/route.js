@@ -4,7 +4,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 // Preço da assinatura em teste: R$0,05 (troque depois para o valor real, ex: 14.90)
-const SUBSCRIPTION_PRICE = 0.05;
+const SUBSCRIPTION_PRICE = 0.01;
 
 export async function POST() {
   const cookieStore = cookies();

@@ -63,14 +63,19 @@
       conic-gradient(from 0deg at 50% 50%, rgba(199,154,75,0.10), transparent 30%, rgba(244,238,224,0.05) 55%, transparent 80%);
     animation: rotateMesh 90s linear infinite;
     opacity:0.9;
+    -webkit-mask-image: radial-gradient(75% 75% at 50% 50%, black 50%, transparent 100%);
+    mask-image: radial-gradient(75% 75% at 50% 50%, black 50%, transparent 100%);
   }
   .colorWash{
-    position:absolute; inset:0; z-index:0; pointer-events:none;
+    position:absolute; inset:-12%; z-index:0; pointer-events:none;
     background:
       radial-gradient(60% 55% at 20% 15%, color-mix(in srgb, var(--theme-color, var(--gold)) 85%, white 5%) 0%, transparent 70%),
       radial-gradient(55% 60% at 85% 80%, var(--theme-color, var(--gold)) 0%, transparent 72%),
       radial-gradient(70% 70% at 60% 40%, color-mix(in srgb, var(--theme-color, var(--gold)) 60%, black 10%) 0%, transparent 75%);
-    opacity:0.65;
+    opacity:0.7;
+    filter: blur(30px);
+    -webkit-mask-image: radial-gradient(85% 80% at 50% 45%, black 60%, transparent 100%);
+    mask-image: radial-gradient(85% 80% at 50% 45%, black 60%, transparent 100%);
     transition: background 0.6s ease;
   }
   .marble{
@@ -78,7 +83,10 @@
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='700' height='700'><filter id='m'><feTurbulence type='fractalNoise' baseFrequency='0.006 0.01' numOctaves='4' seed='7' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0.9 0.9 0.9 0 0'/></filter><rect width='100%25' height='100%25' filter='url(%23m)'/></svg>");
     background-size: 620px 620px;
     mix-blend-mode: overlay;
-    opacity:0.45;
+    opacity:0.4;
+    filter: blur(14px);
+    -webkit-mask-image: radial-gradient(85% 80% at 50% 45%, black 55%, transparent 100%);
+    mask-image: radial-gradient(85% 80% at 50% 45%, black 55%, transparent 100%);
     animation: marbleShift 60s ease-in-out infinite alternate;
   }
   @keyframes marbleShift{
