@@ -1,28 +1,20 @@
 import { NextResponse } from 'next/server';
 import { MercadoPagoConfig, PreApproval } from 'mercadopago';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 
-// Preço da assinatura em teste: R$0,05 (troque depois para o valor real, ex: 14.90)
 const SUBSCRIPTION_PRICE = 0.01;
 
-export async function POST() {
-  const cookieStore = cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: () => {},
-        remove: () => {},
-      },
-    }
-  );
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
+export async function POST(request) {
+  const authHeader = request.headers.get('authorization') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  if (!token) {
     return NextResponse.json({ error: 'not_authenticated' }, { status: 401 });
+  }
+
+  const admin = supabaseAdmin();
+  const { data: { user }, error: authError } = await admin.auth.getUser(token);
+  if (!user) {
+    return NextResponse.json({ error: 'not_authenticated', debug_auth_error: authError?.message || null }, { status: 401 });
   }
 
   if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {

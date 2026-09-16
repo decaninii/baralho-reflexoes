@@ -290,13 +290,20 @@ export default function Home() {
   }
 
   async function handleUpgrade() {
-    if (!user) { window.location.href = '/login'; return; }
+    if (!supabase || !user) { window.location.href = '/login'; return; }
     setIsUpgrading(true);
     try {
-      const res = await fetch('/api/create-subscription', { method: 'POST' });
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) { showToast('Sessão expirada, entre de novo'); window.location.href = '/login'; return; }
+      const res = await fetch('/api/create-subscription', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await res.json();
       if (data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
-      showToast(data.debug_message || data.error || 'Não foi possível iniciar a assinatura');
+      const debugParts = [data.debug_message, data.debug_auth_error].filter(Boolean).join(' · ');
+      showToast(debugParts || data.error || 'Não foi possível iniciar a assinatura');
     } catch {
       showToast('Erro de conexão. Tente de novo.');
     } finally {
