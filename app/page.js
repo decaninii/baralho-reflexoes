@@ -94,8 +94,11 @@ export default function Home() {
           setCurrentThemeId(cur => cur === FEATURED_ID ? pick : cur);
         }
       });
-    supabase.from('subscriptions').select('status').eq('user_id', user.id).single()
-      .then(({ data }) => setIsSubscribed(data?.status === 'active'));
+    supabase.from('subscriptions').select('status, valid_until').eq('user_id', user.id).single()
+      .then(({ data }) => {
+        const active = data?.status === 'active' && (!data.valid_until || new Date(data.valid_until) > new Date());
+        setIsSubscribed(active);
+      });
     supabase.from('favorites').select('theme_id, phrase_idx').eq('user_id', user.id)
       .then(({ data }) => setFavorites(new Set((data || []).map(f => `${f.theme_id}:${f.phrase_idx}`))));
   }, [user, supabase]);
@@ -296,7 +299,7 @@ export default function Home() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       if (!token) { showToast('Sessão expirada, entre de novo'); window.location.href = '/login'; return; }
-      const res = await fetch('/api/create-subscription', {
+      const res = await fetch('/api/create-payment', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
